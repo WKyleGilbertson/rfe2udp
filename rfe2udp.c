@@ -469,15 +469,15 @@ int main(int argc, char *argv[])
   cnfg.ftC.ftData.Description = DescriptionBuf;
   cnfg.ftC.ftData.SerialNumber = SerialNumberBuf;
 
-  PKT rx, bfr, ms;
+  PKT rx, bfr, ms, frame;
   FT_STATUS ftS;
 
   float sampleTime = 0.0;
-  unsigned long i = 0, totalBytes = 0, targetBytes = 0;
+  unsigned long i = 0, totalBytes = 0, targetBytes = 0, targetFrames = 0;
   unsigned char sampleValue;
   char valueToWrite;
 
-  uint32_t idx = 0, mscount = 0;
+  uint32_t idx = 0, mscount = 0, Nframes = 0;
   int32_t len = 0;
   uint8_t blankLine[120];
   uint8_t ch;
@@ -547,14 +547,15 @@ int main(int argc, char *argv[])
 
   /* After Arguments Parsed, Open [Optional] Files */
 
-  targetBytes = BYTESPERPKT * cnfg.sampMS * PKTPERMS;
-  sampleTime = (float)(targetBytes / (BYTESPERPKT * PKTPERMS)) / MSPERSEC;
-  //targetBytes = BYTESPERMS * cnfg.sampMS;
-  //sampleTime = (float)(targetBytes / BYTESPERMS) / MSPERSEC;
+//  targetBytes = BYTESPERPKT * cnfg.sampMS * PKTPERMS;
+//  sampleTime = (float)(targetBytes / (BYTESPERPKT * PKTPERMS)) / MSPERSEC;
+  targetBytes = BYTESPERMS * cnfg.sampMS;
+  targetFrames = targetBytes / BYTESPERPKT;
+  sampleTime = (float)(targetBytes / BYTESPERMS) / MSPERSEC;
 
   //  fprintf(stdout, "%d ms requested.\n", cnfg.sampMS);
-  fprintf(stdout, "Collecting %10lu Bytes (Nms*8184) [%6.3f sec] in %s\n",
-          targetBytes, sampleTime, cnfg.outFname);
+  fprintf(stdout, "Collecting %10lu Bytes %10lu Frames (Nms*8184) [%6.3f sec] in %s\n",
+          targetBytes, targetFrames, sampleTime, cnfg.outFname);
 
 #ifdef WINUDP
   iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
@@ -595,17 +596,23 @@ int main(int argc, char *argv[])
         while (bfr.SZE > BYTESPERPKT)
         {
           //          fprintf(stderr, "ms# %8u", ++mscount);
-          deQueue(&bfr, &ms, BYTESPERPKT);
-          if (mscount++ < cnfg.sampMS)
+          //deQueue(&bfr, &ms, BYTESPERPKT);
+          deQueue(&bfr, &frame, BYTESPERPKT);
+          //if (mscount++ < cnfg.sampMS)
+          if (Nframes++ < targetFrames)
           {
             if (cnfg.logfile == true)
             {
-              fwrite(ms.MSG, sizeof(uint8_t), BYTESPERPKT, cnfg.ofp);
+              //fwrite(ms.MSG, sizeof(uint8_t), BYTESPERPKT, cnfg.ofp);
+              fwrite(frame.MSG, sizeof(uint8_t), BYTESPERPKT, cnfg.ofp);
             }
             else
             {
-              
-              writeToBinFile(&cnfg, &ms);
+             fprintf(stdout, "Frame# %d\n", Nframes);
+             for (idx=0; idx<BYTESPERPKT; idx++)
+//             fprintf(stdout, "%.2X",frame.MSG[idx]);
+//             fprintf(stdout, "\n"); 
+              writeToBinFile(&cnfg, &frame);
             }
           }
           else{break;}
@@ -616,7 +623,6 @@ int main(int argc, char *argv[])
           rx.CNT = targetBytes - totalBytes;
         }
         totalBytes += rx.CNT;
-        fprintf(stdout, "pkt# %8u", mscount);
       }                          // end buffer read not too big
       memset(rx.MSG, 0, rx.CNT); // May not be necessary
     }                            // end Read was not an error
