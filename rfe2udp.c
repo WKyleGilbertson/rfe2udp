@@ -576,14 +576,14 @@ int main(int argc, char *argv[])
   while (totalBytes < targetBytes)
   {
     ftS = FT_GetQueueStatus(cnfg.ftC.ftH, &rx.CNT);
-    fprintf(stdout, "%s", blankLine);
-    fprintf(stdout, "Collected: %10lu Bytes [%10lu left with %5d in queue] ",
+    //fprintf(stdout, "%s", blankLine);
+    fprintf(stdout, "Collected: %10lu Bytes [%10lu left with %5d in queue]\n",
             totalBytes, targetBytes - totalBytes, rx.CNT);
     rx.SZE = rx.CNT; // tell it you want the whole buffer
     ftS = FT_Read(cnfg.ftC.ftH, rx.MSG, rx.SZE, &rx.CNT);
     if (ftS != FT_OK)
     {
-      fprintf(stderr, "Status not OK %d\n", ftS);
+      fprintf(stderr, "FTDI status not OK %d\n", ftS);
       exit(1);
     }
     else
@@ -604,6 +604,7 @@ int main(int argc, char *argv[])
             }
             else
             {
+              
               writeToBinFile(&cnfg, &ms);
             }
           }
