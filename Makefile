@@ -3,7 +3,7 @@ CC = cl
 #CFLAGS = -I
 CURRENT_HASH := '"$(shell git rev-parse HEAD)"'
 CURRENT_DATE := '"$(shell date /t)"'
-CURRENT_NAME := '"L1IFtap"'
+CURRENT_NAME := '"rfe2udp"'
 
 rfe2udp: rfe2udp.c
 	$(CC) rfe2udp.c /EHsc /DCURRENT_HASH=$(CURRENT_HASH) \

@@ -134,7 +134,7 @@ void processArgs(int argc, char *argv[], CONFIG *cfg)
 {
   static int len, i, ch = ' ';
   static char *usage =
-      "usage: L1IFtap [ms] [options]\n"
+      "usage: rfe2udp [ms] [options]\n"
       "       ms            how many milliseconds of data to collect\n"
       "       -f <filename> write to a different filename than the default\n"
       "       -l [filename] log raw data rather than binary interpretation\n"
