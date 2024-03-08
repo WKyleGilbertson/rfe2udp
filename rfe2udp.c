@@ -27,7 +27,7 @@
 #include "inc/WinTypes.h"
 #endif
 
-//#define MLEN 65536
+// #define MLEN 65536
 #define MLEN 131072
 #define BYTESPERMS 8184
 #define BYTESPERPKT 1023
@@ -289,9 +289,9 @@ void readFTDIConfig(FT_CFG *cfg)
     }
 #endif
     ftS = FT_SetLatencyTimer(cfg->ftH, 2);
-    //ftS = FT_SetUSBParameters(cfg->ftH, 0x10000, 0x10000);
+    // ftS = FT_SetUSBParameters(cfg->ftH, 0x10000, 0x10000);
     ftS = FT_SetUSBParameters(cfg->ftH, 0x02000, 0x02000); // 8192
-    //ftS = FT_SetUSBParameters(cfg->ftH, 0x03000, 0x03000); // 16384
+    // ftS = FT_SetUSBParameters(cfg->ftH, 0x03000, 0x03000); // 16384
   }
 }
 
@@ -546,14 +546,10 @@ int main(int argc, char *argv[])
 #endif
 
   /* After Arguments Parsed, Open [Optional] Files */
-
-//  targetBytes = BYTESPERPKT * cnfg.sampMS * PKTPERMS;
-//  sampleTime = (float)(targetBytes / (BYTESPERPKT * PKTPERMS)) / MSPERSEC;
   targetBytes = BYTESPERMS * cnfg.sampMS;
   targetFrames = targetBytes / BYTESPERPKT;
   sampleTime = (float)(targetBytes / BYTESPERMS) / MSPERSEC;
 
-  //  fprintf(stdout, "%d ms requested.\n", cnfg.sampMS);
   fprintf(stdout, "Collecting %10lu Bytes %10lu Frames (Nms*8184) [%6.3f sec] in %s\n",
           targetBytes, targetFrames, sampleTime, cnfg.outFname);
 
@@ -577,9 +573,6 @@ int main(int argc, char *argv[])
   while (totalBytes < targetBytes)
   {
     ftS = FT_GetQueueStatus(cnfg.ftC.ftH, &rx.CNT);
-    //fprintf(stdout, "%s", blankLine);
-    fprintf(stdout, "Collected: %10lu Bytes [%10lu left with %5d in queue]\n",
-            totalBytes, targetBytes - totalBytes, rx.CNT);
     rx.SZE = rx.CNT; // tell it you want the whole buffer
     ftS = FT_Read(cnfg.ftC.ftH, rx.MSG, rx.SZE, &rx.CNT);
     if (ftS != FT_OK)
@@ -592,34 +585,25 @@ int main(int argc, char *argv[])
       if ((rx.CNT < 65536) && (rx.CNT > 0))
       {
         enQueue(&rx, &bfr, rx.CNT);
-        //while (bfr.SZE > BYTESPERMS)
         while (bfr.SZE > BYTESPERPKT)
         {
-          //          fprintf(stderr, "ms# %8u", ++mscount);
-          //deQueue(&bfr, &ms, BYTESPERPKT);
           deQueue(&bfr, &frame, BYTESPERPKT);
-          Nframes++;
-          //if (mscount++ < cnfg.sampMS)
-          if (Nframes < targetFrames) // When streaming, this is senseless
+          if (Nframes++ < targetFrames) // When streaming, this is senseless
           {
             if (cnfg.logfile == true)
             {
-              //fwrite(ms.MSG, sizeof(uint8_t), BYTESPERPKT, cnfg.ofp);
               fwrite(frame.MSG, sizeof(uint8_t), BYTESPERPKT, cnfg.ofp);
+              /* Write frame to UDP Socket */
             }
             else
             {
-             fprintf(stdout, "Frame# %d\n", Nframes);
-             /*
-             for (idx=0; idx<BYTESPERPKT; idx++) {
-             fprintf(stdout, "%.2X",frame.MSG[idx]);
-             }
-             fprintf(stdout, "\n"); */ 
               writeToBinFile(&cnfg, &frame);
-              /* Write frame to UDP Socket */
             }
           }
-          else{break;}
+          else
+          {
+            break;
+          }
         }
 
         if ((totalBytes + rx.CNT) > targetBytes)
@@ -630,7 +614,11 @@ int main(int argc, char *argv[])
       }                          // end buffer read not too big
       memset(rx.MSG, 0, rx.CNT); // May not be necessary
     }                            // end Read was not an error
-  }                              // end while loop
+    fprintf(stdout, "%s", blankLine);
+    fprintf(stdout, "Collected: %10lu Bytes [%10lu left with %5d in queue] ",
+            totalBytes, targetBytes - totalBytes, rx.CNT);
+    fprintf(stdout, "NPkts %10d", Nframes - 1);
+  } // end while loop
 
   if (FT_W32_PurgeComm(cnfg.ftC.ftH, PURGE_TXCLEAR | PURGE_RXCLEAR))
   {
