@@ -469,7 +469,7 @@ int main(int argc, char *argv[])
   cnfg.ftC.ftData.Description = DescriptionBuf;
   cnfg.ftC.ftData.SerialNumber = SerialNumberBuf;
 
-  PKT rx, bfr, ms, frame;
+  PKT rx, bfr, frame;
   FT_STATUS ftS;
 
   float sampleTime = 0.0;
@@ -506,9 +506,9 @@ int main(int argc, char *argv[])
 
   memset(rx.MSG, 0, 65536);
   memset(bfr.MSG, 0, 65536);
-  memset(ms.MSG, 0, 65536);
+  memset(frame.MSG, 0, 65536);
   bfr.CNT = bfr.SZE = 0;
-  ms.CNT = ms.SZE = 0;
+  frame.CNT = frame.SZE = 0;
 
   initconfig(&cnfg);
 
@@ -598,8 +598,9 @@ int main(int argc, char *argv[])
           //          fprintf(stderr, "ms# %8u", ++mscount);
           //deQueue(&bfr, &ms, BYTESPERPKT);
           deQueue(&bfr, &frame, BYTESPERPKT);
+          Nframes++;
           //if (mscount++ < cnfg.sampMS)
-          if (Nframes++ < targetFrames)
+          if (Nframes < targetFrames) // When streaming, this is senseless
           {
             if (cnfg.logfile == true)
             {
@@ -609,10 +610,13 @@ int main(int argc, char *argv[])
             else
             {
              fprintf(stdout, "Frame# %d\n", Nframes);
-             for (idx=0; idx<BYTESPERPKT; idx++)
-//             fprintf(stdout, "%.2X",frame.MSG[idx]);
-//             fprintf(stdout, "\n"); 
+             /*
+             for (idx=0; idx<BYTESPERPKT; idx++) {
+             fprintf(stdout, "%.2X",frame.MSG[idx]);
+             }
+             fprintf(stdout, "\n"); */ 
               writeToBinFile(&cnfg, &frame);
+              /* Write frame to UDP Socket */
             }
           }
           else{break;}
