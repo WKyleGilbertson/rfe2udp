@@ -617,7 +617,7 @@ int main(int argc, char *argv[])
     fprintf(stdout, "%s", blankLine);
     fprintf(stdout, "Collected: %10lu Bytes [%10lu left with %5d in queue] ",
             totalBytes, targetBytes - totalBytes, rx.CNT);
-    fprintf(stdout, "NPkts %10d", Nframes - 1);
+    fprintf(stdout, "NPkts %10d [%7.3f]", Nframes - 1, ((float)Nframes-1)/8000);
   } // end while loop
 
   if (FT_W32_PurgeComm(cnfg.ftC.ftH, PURGE_TXCLEAR | PURGE_RXCLEAR))
