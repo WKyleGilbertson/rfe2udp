@@ -35,6 +35,32 @@
 #define MSPERSEC 1000
 // #define DEBUG
 
+typedef struct signmag2bit
+{
+  uint8_t loI : 2, loQ : 2, hiI : 2, hiQ : 2;
+} signmag2bit;
+
+int8_t expand2bitsignmag(uint8_t value)
+{
+  switch (value)
+  {
+  case 0:
+    return 1;
+    break;
+  case 1:
+    return 3;
+    break;
+  case 2:
+    return -1;
+    break;
+  case 3:
+    return -3;
+    break;
+  default:
+    return 0;
+    break;
+  }
+}
 typedef struct
 {
   uint8_t MSG[MLEN];
@@ -298,48 +324,26 @@ void readFTDIConfig(FT_CFG *cfg)
 void raw2bin(FILE *dst, FILE *src, bool FNHN)
 {
   int32_t fSize = 0, idx = 0;
-  uint8_t byteData = 0, upperNibble, lowerNibble;
+  signmag2bit data;
   int8_t valueToWrite = 0;
   fileSize(src, &fSize);
   //  printf("Convert file size: %d\n", fSize);
 
   for (idx = 0; idx < fSize; idx++)
   {
-    byteData = fgetc(src);
-    upperNibble = (byteData & 0x30) >> 4;
-    lowerNibble = (byteData & 0x03);
-    switch (FNHN == true ? upperNibble : lowerNibble)
-    {
-    case 0x00:
-      valueToWrite = 1;
-      break;
-    case 0x01:
-      valueToWrite = 3;
-      break;
-    case 0x02:
-      valueToWrite = -1;
-      break;
-    case 0x03:
-      valueToWrite = -3;
-      break;
+    fread(&data, 1, sizeof(signmag2bit), src);
+    if (FNHN == true) {
+      fputc(expand2bitsignmag((uint8_t) data.hiI), dst);
+      fputc(expand2bitsignmag((uint8_t) data.hiQ), dst);
+      fputc(expand2bitsignmag((uint8_t) data.loI), dst);
+      fputc(expand2bitsignmag((uint8_t) data.loQ), dst);
     }
-    fputc(valueToWrite, dst);
-    switch (FNHN == true ? lowerNibble : upperNibble)
-    {
-    case 0x00:
-      valueToWrite = 1;
-      break;
-    case 0x01:
-      valueToWrite = 3;
-      break;
-    case 0x02:
-      valueToWrite = -1;
-      break;
-    case 0x03:
-      valueToWrite = -3;
-      break;
+    else {
+      fputc(expand2bitsignmag((uint8_t) data.loI), dst);
+      fputc(expand2bitsignmag((uint8_t) data.loQ), dst);
+      fputc(expand2bitsignmag((uint8_t) data.hiI), dst);
+      fputc(expand2bitsignmag((uint8_t) data.hiQ), dst);
     }
-    fputc(valueToWrite, dst);
   }
   fclose(src);
   fclose(dst);
@@ -348,49 +352,27 @@ void raw2bin(FILE *dst, FILE *src, bool FNHN)
 void writeToBinFile(CONFIG *cfg, PKT *p)
 {
   int32_t idx = 0;
-  uint8_t byteData = 0, upperNibble, lowerNibble;
-  int8_t valueToWrite = 0, buff[131072];
+  signmag2bit data;
+  int8_t buff[131072];
 
   memset(buff, 0, 131072);
   for (idx = 0; idx < p->CNT; idx++)
   {
-    byteData = p->MSG[idx];
-    upperNibble = (byteData & 0x30) >> 4;
-    lowerNibble = (byteData & 0x03);
-    switch (cfg->FNHN == true ? upperNibble : lowerNibble)
-    {
-    case 0x00:
-      valueToWrite = 1;
-      break;
-    case 0x01:
-      valueToWrite = 3;
-      break;
-    case 0x02:
-      valueToWrite = -1;
-      break;
-    case 0x03:
-      valueToWrite = -3;
-      break;
+    memcpy(&data, &p->MSG[idx], 1);
+    if (cfg->FNHN == true) {
+      buff[4*idx]   = expand2bitsignmag(data.hiI);
+      buff[4*idx+1] = expand2bitsignmag(data.hiQ);
+      buff[4*idx+2] = expand2bitsignmag(data.loI);
+      buff[4*idx+3] = expand2bitsignmag(data.loI);
     }
-    buff[2 * idx] = valueToWrite;
-    switch (cfg->FNHN == true ? lowerNibble : upperNibble)
-    {
-    case 0x00:
-      valueToWrite = 1;
-      break;
-    case 0x01:
-      valueToWrite = 3;
-      break;
-    case 0x02:
-      valueToWrite = -1;
-      break;
-    case 0x03:
-      valueToWrite = -3;
-      break;
+    else {
+      buff[4*idx]   = expand2bitsignmag(data.loI);
+      buff[4*idx+1] = expand2bitsignmag(data.loQ);
+      buff[4*idx+2] = expand2bitsignmag(data.hiI);
+      buff[4*idx+3] = expand2bitsignmag(data.hiQ);
     }
-    buff[2 * idx + 1] = valueToWrite;
-  }
-  fwrite(buff, sizeof(int8_t), p->CNT * 2, cfg->ofp);
+  } 
+  fwrite(buff, sizeof(int8_t), p->CNT * 4, cfg->ofp);
 }
 
 void convertFile(CONFIG *cfg)
@@ -617,7 +599,7 @@ int main(int argc, char *argv[])
     fprintf(stdout, "%s", blankLine);
     fprintf(stdout, "Collected: %10lu Bytes [%10lu left with %5d in queue] ",
             totalBytes, targetBytes - totalBytes, rx.CNT);
-    fprintf(stdout, "NPkts %10d [%7.3f]", Nframes - 1, ((float)Nframes-1)/8000);
+    fprintf(stdout, "NPkts %10d [%7.3f]", Nframes - 1, ((float)Nframes - 1) / 8000);
   } // end while loop
 
   if (FT_W32_PurgeComm(cnfg.ftC.ftH, PURGE_TXCLEAR | PURGE_RXCLEAR))
