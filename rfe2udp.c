@@ -1,6 +1,7 @@
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
+#define WINUDP
 
 #pragma comment(lib, "lib/FTD2XX.lib")
 #ifdef WINUDP
@@ -64,8 +65,8 @@ int8_t expand2bitsignmag(uint8_t value)
 typedef struct
 {
   uint8_t MSG[MLEN];
-  uint32_t SZE;
-  uint32_t CNT;
+  int32_t SZE;
+  int32_t CNT;
 } PKT;
 
 typedef struct
@@ -436,6 +437,14 @@ int main(int argc, char *argv[])
 #ifdef WINUDP
   WSADATA wsaData;
   int32_t iResult; // WSA
+  PKT UDPtx, UDPrx;
+  SOCKET UDPsock = INVALID_SOCKET;
+  struct addrinfo *result = NULL, *ptr = NULL, hints;
+  struct sockaddr_storage their_addr;
+  socklen_t addr_size = sizeof their_addr;
+  const char *service = "27015";
+  short port = 27015;
+  const char *node = "192.168.0.20";
 #endif
   CONFIG cnfg;
   char ManufacturerBuf[32];
@@ -537,11 +546,73 @@ int main(int argc, char *argv[])
 
 #ifdef WINUDP
   iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
-  if (iResult != 0)
+  //if (iResult != 0)
+  if (iResult != NO_ERROR)
   {
     fprintf(stderr, "WSAStartup failed: %d\n", iResult);
     return 1;
   }
+  else {
+    memset(&UDPtx, 0, sizeof UDPtx);
+    memset(&UDPrx, 0, sizeof UDPrx);
+    UDPtx.SZE = (int32_t) (sizeof(UDPtx.MSG) - 1);
+    UDPrx.SZE = (int32_t) (sizeof(UDPrx.MSG));
+  
+  memset(&hints, 0, sizeof hints);
+  hints.ai_family = AF_UNSPEC;
+  hints.ai_socktype = SOCK_DGRAM;
+  hints.ai_flags = AI_PASSIVE;
+  
+  iResult = getaddrinfo(node, service, &hints, &result);
+  if (iResult != 0)
+  {
+    printf("getaddrinfo failed with error: %d\n", iResult);
+    WSACleanup();
+    return 1;
+  }
+  
+  for (ptr = result; ptr != NULL; ptr = ptr->ai_next)
+  {
+    UDPsock = socket(ptr->ai_family, ptr->ai_socktype, ptr->ai_protocol);
+    if (UDPsock == INVALID_SOCKET)
+    {
+      printf("socket failed with error %d\n", WSAGetLastError());
+      WSACleanup();
+      return 1;
+    } 
+
+    iResult = bind(UDPsock, ptr->ai_addr, (int32_t)ptr->ai_addrlen);
+    if (iResult != 0) 
+    {
+      closesocket(UDPsock);
+      UDPsock = INVALID_SOCKET;
+      printf("bind failed with error: %d\n", WSAGetLastError());
+      return 1;
+    }
+  }
+  freeaddrinfo(result);
+  
+  printf("Receiving Datagrames on %s\n", node);
+  UDPrx.CNT = recvfrom(UDPsock, UDPrx.MSG, UDPrx.SZE, 0,
+          (SOCKADDR *)&their_addr, &addr_size);
+  iResult = getpeername(UDPsock, (SOCKADDR *)&their_addr, &addr_size);
+  if (iResult == -1)
+  {
+    printf("Nothing here\n");
+  }
+  if (UDPrx.CNT == SOCKET_ERROR)
+  {
+    printf("recvfrom failed with error: %d\n", WSAGetLastError());
+  }
+  UDPrx.MSG[UDPrx.CNT] = '\0';
+  printf("Received: %s\n", UDPrx.MSG);
+  }
+
+  iResult = getpeername(UDPsock, (SOCKADDR *) &their_addr, &addr_size);
+if (iResult == -1)
+{
+  printf("Nothing here\n");
+}
 #endif
 
   ftS = FT_Purge(cnfg.ftC.ftH, FT_PURGE_RX | FT_PURGE_TX); // Purge both Rx and Tx buffers
@@ -575,6 +646,10 @@ int main(int argc, char *argv[])
             if (cnfg.logfile == true)
             {
               fwrite(frame.MSG, sizeof(uint8_t), BYTESPERPKT, cnfg.ofp);
+              #ifdef WINUDP
+                UDPtx.CNT= sendto(UDPsock, frame.MSG, frame.SZE, 0,
+                          (SOCKADDR *) &their_addr, addr_size);
+              #endif
               /* Write frame to UDP Socket */
             }
             else
