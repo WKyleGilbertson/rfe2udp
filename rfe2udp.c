@@ -536,13 +536,13 @@ int main(int argc, char *argv[])
   fprintf(stdout, "ms: %d\n", cnfg.sampMS);
 #endif
 
-  /* After Arguments Parsed, Open [Optional] Files */
+  /* After Arguments Parsed, Open [Optional] Files 
   targetBytes = BYTESPERMS * cnfg.sampMS;
   targetFrames = targetBytes / BYTESPERPKT;
   sampleTime = (float)(targetBytes / BYTESPERMS) / MSPERSEC;
 
   fprintf(stdout, "Collecting %10lu Bytes %10lu Frames (Nms*8184) [%6.3f sec] in %s\n",
-          targetBytes, targetFrames, sampleTime, cnfg.outFname);
+          targetBytes, targetFrames, sampleTime, cnfg.outFname); */
 
 #ifdef WINUDP
   iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
@@ -595,10 +595,11 @@ int main(int argc, char *argv[])
   printf("Receiving Datagrames on %s\n", node);
   UDPrx.CNT = recvfrom(UDPsock, UDPrx.MSG, UDPrx.SZE, 0,
           (SOCKADDR *)&their_addr, &addr_size);
+
   iResult = getpeername(UDPsock, (SOCKADDR *)&their_addr, &addr_size);
   if (iResult == -1)
   {
-    printf("Nothing here\n");
+    printf("Nothing here #1\n");
   }
   if (UDPrx.CNT == SOCKET_ERROR)
   {
@@ -606,14 +607,23 @@ int main(int argc, char *argv[])
   }
   UDPrx.MSG[UDPrx.CNT] = '\0';
   printf("Received: %s\n", UDPrx.MSG);
+  cnfg.sampMS = atoi(UDPrx.MSG);
   }
 
   iResult = getpeername(UDPsock, (SOCKADDR *) &their_addr, &addr_size);
 if (iResult == -1)
 {
-  printf("Nothing here\n");
+  printf("Nothing here #2\n");
 }
 #endif
+
+  /* After Arguments Parsed, Open [Optional] Files */
+  targetBytes = BYTESPERMS * cnfg.sampMS;
+  targetFrames = targetBytes / BYTESPERPKT;
+  sampleTime = (float)(targetBytes / BYTESPERMS) / MSPERSEC;
+
+  fprintf(stdout, "Collecting %10lu Bytes %10lu Frames (Nms*8184) [%6.3f sec] in %s\n",
+          targetBytes, targetFrames, sampleTime, cnfg.outFname);
 
   ftS = FT_Purge(cnfg.ftC.ftH, FT_PURGE_RX | FT_PURGE_TX); // Purge both Rx and Tx buffers
   if (ftS != FT_OK)
