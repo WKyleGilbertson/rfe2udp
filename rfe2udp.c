@@ -81,11 +81,16 @@ typedef struct
 {
   FILE *ifp;
   FILE *ofp;
+  char node[20]; // Node is the same as IP address
+  char srvc[20]; // Service is the same as port
+  uint16_t port; // Port can be 16 bits
+  uint32_t IP;   // IP Address can be 32 bits
   char baseFname[64];
   char sampFname[64];
   char outFname[64];
   bool convertFile;
   bool logfile;
+  bool binfile;
   bool useTimeStamp;
   bool FNHN;
   uint32_t sampMS;
@@ -151,7 +156,11 @@ void initconfig(CONFIG *cfg)
   strcpy(cfg->baseFname, "L1IFDATA");
   strcpy(cfg->sampFname, "L1IFDATA.raw");
   strcpy(cfg->outFname, "L1IFDATA.bin");
+  strcpy(cfg->node, "192.168.0.20");
+  strcpy(cfg->srvc, "49152");
+  cfg->port = 49152;
   cfg->logfile = false;
+  cfg->binfile = false;
   cfg->useTimeStamp = false;
   cfg->FNHN = true;
   cfg->sampMS = 1;
@@ -333,17 +342,19 @@ void raw2bin(FILE *dst, FILE *src, bool FNHN)
   for (idx = 0; idx < fSize; idx++)
   {
     fread(&data, 1, sizeof(signmag2bit), src);
-    if (FNHN == true) {
-      fputc(expand2bitsignmag((uint8_t) data.hiI), dst);
-      fputc(expand2bitsignmag((uint8_t) data.hiQ), dst);
-      fputc(expand2bitsignmag((uint8_t) data.loI), dst);
-      fputc(expand2bitsignmag((uint8_t) data.loQ), dst);
+    if (FNHN == true)
+    {
+      fputc(expand2bitsignmag((uint8_t)data.hiI), dst);
+      fputc(expand2bitsignmag((uint8_t)data.hiQ), dst);
+      fputc(expand2bitsignmag((uint8_t)data.loI), dst);
+      fputc(expand2bitsignmag((uint8_t)data.loQ), dst);
     }
-    else {
-      fputc(expand2bitsignmag((uint8_t) data.loI), dst);
-      fputc(expand2bitsignmag((uint8_t) data.loQ), dst);
-      fputc(expand2bitsignmag((uint8_t) data.hiI), dst);
-      fputc(expand2bitsignmag((uint8_t) data.hiQ), dst);
+    else
+    {
+      fputc(expand2bitsignmag((uint8_t)data.loI), dst);
+      fputc(expand2bitsignmag((uint8_t)data.loQ), dst);
+      fputc(expand2bitsignmag((uint8_t)data.hiI), dst);
+      fputc(expand2bitsignmag((uint8_t)data.hiQ), dst);
     }
   }
   fclose(src);
@@ -360,19 +371,21 @@ void writeToBinFile(CONFIG *cfg, PKT *p)
   for (idx = 0; idx < p->CNT; idx++)
   {
     memcpy(&data, &p->MSG[idx], 1);
-    if (cfg->FNHN == true) {
-      buff[4*idx]   = expand2bitsignmag(data.hiI);
-      buff[4*idx+1] = expand2bitsignmag(data.hiQ);
-      buff[4*idx+2] = expand2bitsignmag(data.loI);
-      buff[4*idx+3] = expand2bitsignmag(data.loI);
+    if (cfg->FNHN == true)
+    {
+      buff[4 * idx] = expand2bitsignmag(data.hiI);
+      buff[4 * idx + 1] = expand2bitsignmag(data.hiQ);
+      buff[4 * idx + 2] = expand2bitsignmag(data.loI);
+      buff[4 * idx + 3] = expand2bitsignmag(data.loI);
     }
-    else {
-      buff[4*idx]   = expand2bitsignmag(data.loI);
-      buff[4*idx+1] = expand2bitsignmag(data.loQ);
-      buff[4*idx+2] = expand2bitsignmag(data.hiI);
-      buff[4*idx+3] = expand2bitsignmag(data.hiQ);
+    else
+    {
+      buff[4 * idx] = expand2bitsignmag(data.loI);
+      buff[4 * idx + 1] = expand2bitsignmag(data.loQ);
+      buff[4 * idx + 2] = expand2bitsignmag(data.hiI);
+      buff[4 * idx + 3] = expand2bitsignmag(data.hiQ);
     }
-  } 
+  }
   fwrite(buff, sizeof(int8_t), p->CNT * 4, cfg->ofp);
 }
 
@@ -442,9 +455,9 @@ int main(int argc, char *argv[])
   struct addrinfo *result = NULL, *ptr = NULL, hints;
   struct sockaddr_storage their_addr;
   socklen_t addr_size = sizeof their_addr;
-  const char *service = "27015";
-  short port = 27015;
-  const char *node = "192.168.0.20";
+//  const char *service = "27015";
+//  short port = 27015;
+//  const char *node = "192.168.0.20";
 #endif
   CONFIG cnfg;
   char ManufacturerBuf[32];
@@ -536,7 +549,7 @@ int main(int argc, char *argv[])
   fprintf(stdout, "ms: %d\n", cnfg.sampMS);
 #endif
 
-  /* After Arguments Parsed, Open [Optional] Files 
+  /* After Arguments Parsed, Open [Optional] Files
   targetBytes = BYTESPERMS * cnfg.sampMS;
   targetFrames = targetBytes / BYTESPERPKT;
   sampleTime = (float)(targetBytes / BYTESPERMS) / MSPERSEC;
@@ -546,75 +559,76 @@ int main(int argc, char *argv[])
 
 #ifdef WINUDP
   iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
-  //if (iResult != 0)
+  // if (iResult != 0)
   if (iResult != NO_ERROR)
   {
     fprintf(stderr, "WSAStartup failed: %d\n", iResult);
     return 1;
   }
-  else {
+  else
+  {
     memset(&UDPtx, 0, sizeof UDPtx);
     memset(&UDPrx, 0, sizeof UDPrx);
-    UDPtx.SZE = (int32_t) (sizeof(UDPtx.MSG) - 1);
-    UDPrx.SZE = (int32_t) (sizeof(UDPrx.MSG));
-  
-  memset(&hints, 0, sizeof hints);
-  hints.ai_family = AF_UNSPEC;
-  hints.ai_socktype = SOCK_DGRAM;
-  hints.ai_flags = AI_PASSIVE;
-  
-  iResult = getaddrinfo(node, service, &hints, &result);
-  if (iResult != 0)
-  {
-    printf("getaddrinfo failed with error: %d\n", iResult);
-    WSACleanup();
-    return 1;
-  }
-  
-  for (ptr = result; ptr != NULL; ptr = ptr->ai_next)
-  {
-    UDPsock = socket(ptr->ai_family, ptr->ai_socktype, ptr->ai_protocol);
-    if (UDPsock == INVALID_SOCKET)
+    UDPtx.SZE = (int32_t)(sizeof(UDPtx.MSG) - 1);
+    UDPrx.SZE = (int32_t)(sizeof(UDPrx.MSG));
+
+    memset(&hints, 0, sizeof hints);
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_DGRAM;
+    hints.ai_flags = AI_PASSIVE;
+
+    iResult = getaddrinfo(cnfg.node, cnfg.srvc, &hints, &result);
+    if (iResult != 0)
     {
-      printf("socket failed with error %d\n", WSAGetLastError());
+      printf("getaddrinfo failed with error: %d\n", iResult);
       WSACleanup();
       return 1;
-    } 
-
-    iResult = bind(UDPsock, ptr->ai_addr, (int32_t)ptr->ai_addrlen);
-    if (iResult != 0) 
-    {
-      closesocket(UDPsock);
-      UDPsock = INVALID_SOCKET;
-      printf("bind failed with error: %d\n", WSAGetLastError());
-      return 1;
     }
+
+    for (ptr = result; ptr != NULL; ptr = ptr->ai_next)
+    {
+      UDPsock = socket(ptr->ai_family, ptr->ai_socktype, ptr->ai_protocol);
+      if (UDPsock == INVALID_SOCKET)
+      {
+        printf("socket failed with error %d\n", WSAGetLastError());
+        WSACleanup();
+        return 1;
+      }
+
+      iResult = bind(UDPsock, ptr->ai_addr, (int32_t)ptr->ai_addrlen);
+      if (iResult != 0)
+      {
+        closesocket(UDPsock);
+        UDPsock = INVALID_SOCKET;
+        printf("bind failed with error: %d\n", WSAGetLastError());
+        return 1;
+      }
+    }
+    freeaddrinfo(result);
+
+    printf("Receiving Datagrams on %s\n", cnfg.node);
+    UDPrx.CNT = recvfrom(UDPsock, UDPrx.MSG, UDPrx.SZE, 0,
+                         (SOCKADDR *)&their_addr, &addr_size);
+
+    iResult = getpeername(UDPsock, (SOCKADDR *)&their_addr, &addr_size);
+    if (iResult == -1)
+    {
+      printf("Nothing here #1\n");
+    }
+    if (UDPrx.CNT == SOCKET_ERROR)
+    {
+      printf("recvfrom failed with error: %d\n", WSAGetLastError());
+    }
+    UDPrx.MSG[UDPrx.CNT] = '\0';
+    printf("Received: %s\n", UDPrx.MSG);
+    cnfg.sampMS = atoi(UDPrx.MSG);
   }
-  freeaddrinfo(result);
-  
-  printf("Receiving Datagrames on %s\n", node);
-  UDPrx.CNT = recvfrom(UDPsock, UDPrx.MSG, UDPrx.SZE, 0,
-          (SOCKADDR *)&their_addr, &addr_size);
 
   iResult = getpeername(UDPsock, (SOCKADDR *)&their_addr, &addr_size);
   if (iResult == -1)
   {
-    printf("Nothing here #1\n");
+    printf("Nothing here #2\n");
   }
-  if (UDPrx.CNT == SOCKET_ERROR)
-  {
-    printf("recvfrom failed with error: %d\n", WSAGetLastError());
-  }
-  UDPrx.MSG[UDPrx.CNT] = '\0';
-  printf("Received: %s\n", UDPrx.MSG);
-  cnfg.sampMS = atoi(UDPrx.MSG);
-  }
-
-  iResult = getpeername(UDPsock, (SOCKADDR *) &their_addr, &addr_size);
-if (iResult == -1)
-{
-  printf("Nothing here #2\n");
-}
 #endif
 
   /* After Arguments Parsed, Open [Optional] Files */
@@ -634,6 +648,7 @@ if (iResult == -1)
   }
 
   while (totalBytes < targetBytes)
+  //while (1) // Need to keep it running, and take client requests
   {
     ftS = FT_GetQueueStatus(cnfg.ftC.ftH, &rx.CNT);
     rx.SZE = rx.CNT; // tell it you want the whole buffer
@@ -653,16 +668,16 @@ if (iResult == -1)
           deQueue(&bfr, &frame, BYTESPERPKT);
           if (Nframes++ < targetFrames) // When streaming, this is senseless
           {
+#ifdef WINUDP
+            UDPtx.CNT = sendto(UDPsock, frame.MSG, frame.SZE, 0,
+                               (SOCKADDR *)&their_addr, addr_size);
+#endif
+            /* Write frame to UDP Socket */
             if (cnfg.logfile == true)
             {
               fwrite(frame.MSG, sizeof(uint8_t), BYTESPERPKT, cnfg.ofp);
-              #ifdef WINUDP
-                UDPtx.CNT= sendto(UDPsock, frame.MSG, frame.SZE, 0,
-                          (SOCKADDR *) &their_addr, addr_size);
-              #endif
-              /* Write frame to UDP Socket */
             }
-            else
+            if (cnfg.binfile == true)
             {
               writeToBinFile(&cnfg, &frame);
             }
