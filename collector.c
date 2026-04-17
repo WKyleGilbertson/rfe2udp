@@ -27,7 +27,7 @@ typedef struct {
 
 int main() {
     WSADATA wsaData;
-    FT_HANDLE ftHandle;
+    FT_HANDLE ftH;
     FT_STATUS ftStatus;
     SOCKET sock;
     struct sockaddr_in servaddr;
@@ -50,14 +50,17 @@ int main() {
     inet_pton(AF_INET, DEST_IP, &servaddr.sin_addr);
 
     // EXACT OPEN LOGIC
-    ftStatus = FT_OpenEx("USB<->GPS A", FT_OPEN_BY_DESCRIPTION, &ftHandle);
+    ftStatus = FT_OpenEx("USB<->GPS A", FT_OPEN_BY_DESCRIPTION, &ftH);
     if (ftStatus != FT_OK) {
         printf("Open failed\n");
         return 1;
     }
 
-    FT_SetLatencyTimer(ftHandle, 2);
-    FT_SetUSBParameters(ftHandle, 65536, 65536);
+    FT_SetTimeouts(ftH, 100, 100);
+    FT_SetLatencyTimer(ftH, 2);
+    FT_SetUSBParameters(ftH, 0x1000, 0x1000); // Smaller 4KB buffer for faster flushing
+    FT_SetEventNotification(ftH, 0, NULL);    // Disable event characters
+    FT_Purge(ftH, FT_PURGE_RX | FT_PURGE_TX);
     
     hdr.unix_time = (uint32_t)time(NULL);
 
@@ -65,7 +68,7 @@ int main() {
 
     while (1) {
         // Use CHUNK_SIZE (1024) exactly as in your working version
-        ftStatus = FT_Read(ftHandle, buffer, CHUNK_SIZE+2, &bytesRead);
+        ftStatus = FT_Read(ftH, buffer, CHUNK_SIZE+2, &bytesRead);
         
         if (ftStatus == FT_OK && bytesRead == 1025) {
             if (total_bytes_in_second >= 8184000) {
@@ -91,7 +94,7 @@ int main() {
         }
     }
 
-    FT_Close(ftHandle);
+    FT_Close(ftH);
     closesocket(sock);
     WSACleanup();
     return 0;
