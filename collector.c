@@ -13,7 +13,7 @@
 #pragma comment(lib, "ws2_32.lib")
 #pragma comment(lib, "lib/FTD2XX.lib")
 
-#define CHUNK_SIZE 1024
+#define CHUNK_SIZE 1023
 #define DEST_IP "127.0.0.1"
 #define DEST_PORT 12345
 
@@ -65,9 +65,9 @@ int main() {
 
     while (1) {
         // Use CHUNK_SIZE (1024) exactly as in your working version
-        ftStatus = FT_Read(ftHandle, buffer, CHUNK_SIZE, &bytesRead);
+        ftStatus = FT_Read(ftHandle, buffer, CHUNK_SIZE+2, &bytesRead);
         
-        if (ftStatus == FT_OK && bytesRead > 0) {
+        if (ftStatus == FT_OK && bytesRead == 1025) {
             if (total_bytes_in_second >= 8184000) {
                 hdr.unix_time = (uint32_t)time(NULL);
                 total_bytes_in_second = 0;
@@ -77,13 +77,13 @@ int main() {
 
             // Copy header then payload
             memcpy(send_buf, &hdr, 12);
-            memcpy(send_buf + 12, buffer, bytesRead);
+            memcpy(send_buf + 12, buffer, CHUNK_SIZE);
 
-            sendto(sock, (const char*)send_buf, bytesRead + 12, 0,
+            sendto(sock, (const char*)send_buf, 1035, 0,
                    (const struct sockaddr *)&servaddr, sizeof(servaddr));
 
+            total_bytes_in_second += 1023;
             hdr.seq_num++;
-            total_bytes_in_second += bytesRead;
 
         } else if (ftStatus != FT_OK) {
             fprintf(stderr, "FTDI Read Error: %d\n", (int)ftStatus);
