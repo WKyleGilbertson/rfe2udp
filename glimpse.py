@@ -11,10 +11,14 @@ header_size = struct.calcsize(header_format)
 PACKETS_TO_SAVE = 80  # Adjust as needed
 output_filename = "cap.raw"
 
-sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-sock.bind(("127.0.0.1", 12345))
+RELAY_IP = "127.0.0.1"
+RELAY_PORT = 12345
 
-sock.sendto(struct.pack("<I", 0x4A4F494E), ("127.0.0.1", 12345))
+sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+#sock.bind(("127.0.0.1", 12345))
+sock.bind(('', 0))  # Bind to any available port
+
+sock.sendto(struct.pack("<I", 0x4A4F494E), (RELAY_IP, RELAY_PORT))  # "JOIN" in ASCII
 print(f"Sent JOIN command to RFE2UDP server at 127.0.0.1:12345")
 
 print(f"Capturing precise stream to {output_filename}...")
