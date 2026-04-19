@@ -38,7 +38,10 @@ int main() {
     SOCKET sock;
     struct sockaddr_in servaddr;
     DWORD bytesRead = 0, bytesQueued = 0;
-    uint64_t total_bytes_streamed = 0;
+    uint64_t total_bytes_streamed = 0, total_bytes_all_time = 0;
+    uint32_t absolute_tick = 0, bytes_since_last_print = 0;
+    time_t start_time = time(NULL);
+    double elapsed_time = 0.0, mb_total = 0.0;
     PacketHeader hdr = {0};
 
     WSAStartup(MAKEWORD(2, 2), &wsaData);
@@ -72,15 +75,25 @@ int main() {
 
                 // Dequeue 1023-byte packets
                 while (count >= PAYLOAD_SIZE) {
-                    if (total_bytes_streamed >= 8184000) {
+                    //hdr.sample_tick = (uint32_t)total_bytes_streamed;
+                    hdr.sample_tick = absolute_tick;
+                    memcpy((void*)udp_buf, (void*)&hdr, sizeof(PacketHeader));
+                    absolute_tick += PAYLOAD_SIZE;
+                    bytes_since_last_print += PAYLOAD_SIZE;
+
+                    if (bytes_since_last_print >= 8184000) {
+                        bytes_since_last_print = 0;
                         hdr.unix_time = (uint32_t)time(NULL);
+                        total_bytes_all_time += total_bytes_streamed;
                         total_bytes_streamed = 0;
-                        printf("."); 
+                        time_t now = time(NULL);
+                        elapsed_time = difftime(now, start_time);
+                        mb_total = total_bytes_all_time / (1024.0 * 1024.0);
+        printf("\r[RUNNING] Uptime: %02d:%02d:%02d | Sent: %.2f MB | Tick: %u    ", 
+           (int)(elapsed_time / 3600), ((int)elapsed_time % 3600) / 60,
+           (int)elapsed_time % 60, mb_total, hdr.sample_tick);
                         fflush(stdout);
                     }
-
-                    hdr.sample_tick = (uint32_t)total_bytes_streamed;
-                    memcpy((void*)udp_buf, (void*)&hdr, 12);
 
                     // Bulk Pull from FIFO (manual copy to handle wrap)
                     for (int i = 0; i < PAYLOAD_SIZE; i++) {

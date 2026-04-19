@@ -7,11 +7,15 @@ header_format = "<III"
 header_size = struct.calcsize(header_format)
 
 # Capture Settings
-PACKETS_TO_SAVE = 1000  # Adjust as needed
-output_filename = "capture_data.bin"
+#PACKETS_TO_SAVE = 1000  # Adjust as needed
+PACKETS_TO_SAVE = 80  # Adjust as needed
+output_filename = "cap.raw"
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 sock.bind(("127.0.0.1", 12345))
+
+sock.sendto(struct.pack("<I", 0x4A4F494E), ("127.0.0.1", 12345))
+print(f"Sent JOIN command to RFE2UDP server at 127.0.0.1:12345")
 
 print(f"Capturing precise stream to {output_filename}...")
 print(f"{'Seq':>10} | {'ISO8601 Timestamp':>24} | {'Tick':>8} | {'Phase':>5}")
@@ -29,10 +33,8 @@ with open(output_filename, "wb") as f:
                 
                 # Write only the raw RF data to file
                 f.write(payload)
-                
-                # Calculate time and phase
-                # 8184 samples = 1ms
-                ms = tick // 8184
+                # 1. Calculate how many milliseconds are into the CURRENT second
+                ms = (tick % 8184000) // 8184
                 phase = tick % 8184
                 
                 dt = datetime.fromtimestamp(unix_t, tz=timezone.utc)
