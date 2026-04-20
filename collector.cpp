@@ -17,11 +17,11 @@
 
 #pragma pack(push, 1)
 typedef struct {
-    uint8_t pkt_type; // 0x01 for Data, 0x02 for Command, etc.
+    uint32_t pkt_type; // 0x01 for Data, 0x02 for Command, etc.
     uint32_t unix_time;
     uint32_t sample_tick;
     uint32_t seq_num;
-    char dev_tag; 
+    char dev_tag[16]; 
 } RFE_Header_t;
 #pragma pack(pop)
 
@@ -43,8 +43,9 @@ int main(int argc, char** argv) {
     FT_HANDLE ftH;
     SOCKET sock;
     struct sockaddr_in servaddr;
-    S.hdr.pkt_type = 0x01; // Data packet
-    
+
+    S.hdr.pkt_type = 0x01;
+
     memset(&S, 0, sizeof(struct InternalState));
     const char* target_host = (argc > 1) ? *(argv + 1) : "P2P.local";
 
@@ -66,13 +67,16 @@ int main(int argc, char** argv) {
         printf("[*] FTDI Serial: %s\n", pSN);
         
         if (slen >= 4) {
+            memcpy(&S.hdr.dev_tag, pSN, slen);
             // Manual pointer arithmetic to avoid [] subscript operator conflicts
+            /*
             *(char*)((char*)&S.hdr.dev_tag + 0) = *(char*)(pSN + slen - 4);
             *(char*)((char*)&S.hdr.dev_tag + 1) = *(char*)(pSN + slen - 3);
             *(char*)((char*)&S.hdr.dev_tag + 2) = *(char*)(pSN + slen - 2);
             *(char*)((char*)&S.hdr.dev_tag + 3) = *(char*)(pSN + slen - 1);
+            */
         } else {
-            memcpy(&S.hdr.dev_tag, "UKWN", 4);
+            memcpy(&S.hdr.dev_tag, "Uknown", 6);
         }
     }
 
@@ -101,7 +105,7 @@ int main(int argc, char** argv) {
     uint64_t total_bytes = 0;
     time_t start_t = time(NULL);
 
-    printf("[*] Streaming to %s | Tag: %.4s\n", target_host, (char*)&S.hdr.dev_tag);
+    printf("[*] Streaming to %s | Tag: %s\n", target_host, (char*)&S.hdr.dev_tag);
 
     while (1) {
         DWORD bQ = 0, bR = 0;
@@ -136,7 +140,7 @@ int main(int argc, char** argv) {
                     if (bytes_since_print >= 8184000) {
                         time_t now = time(NULL);
                         double elapsed = difftime(now, start_t);
-                        printf("\r[UP:%02d:%02d:%02d] Sent:%6.1fMB | ID: %.4s", 
+                        printf("\r[UP:%02d:%02d:%02d] Sent:%6.1fMB | ID: %s", 
                             (int)elapsed/3600, ((int)elapsed%3600)/60, (int)elapsed%60, 
                             (double)total_bytes/1048576.0, (char*)&S.hdr.dev_tag);
                         fflush(stdout);
