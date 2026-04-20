@@ -48,28 +48,45 @@ private:
     std::mutex _mtx;
     SOCKET _s;
 
-    void ingest_thread() {
-        std::vector<uint8_t> _tmp_buf(2048);
-        bool _is_aligned = false;
-        const int HEADER_SIZE = 29;
-        const int EXPECTED_PACKET = 1052;
+void ingest_thread() {
+    std::vector<uint8_t> _tmp_buf(2048);
+    bool _is_aligned = false;
+    const int HEADER_SIZE = 29;
+    
+    std::cout << "[*] Ingest thread started. Waiting for packets..." << std::endl;
 
-        while (true) {
-            sockaddr_in _src{};
-            socklen_t _addr_len = sizeof(_src);
-            int _len = recvfrom(_s, (char*)_tmp_buf.data(), 2048, 0, (struct sockaddr*)&_src, &_addr_len);
-            
-            if (_len == EXPECTED_PACKET) {
-                RFE_Header_t* hdr = (RFE_Header_t*)_tmp_buf.data();
-                if (!_is_aligned) {
-                    if (hdr->sample_tick % 8184 == 0) { 
-                        _is_aligned = true;
-                        std::cout << "\n[+] LOCKED: Phase 0 Alignment Achieved." << std::endl;
-                    } else continue;
-                }
+    while (true) {
+        sockaddr_in _src{};
+        socklen_t _addr_len = sizeof(_src);
+        int _len = recvfrom(_s, (char*)_tmp_buf.data(), 2048, 0, (struct sockaddr*)&_src, &_addr_len);
+        
+        if (_len > 0) {
+            // If we get ANY packet, print its size once so we can calibrate
+            static bool first_packet = true;
+            if (first_packet) {
+                std::cout << "[!] Received first packet. Size: " << _len << " bytes." << std::endl;
+                first_packet = false;
+            }
 
-                std::lock_guard<std::mutex> _lock(_mtx);
-                int _p_len = _len - HEADER_SIZE;
+            if (_len < HEADER_SIZE) continue;
+
+            RFE_Header_t* hdr = (RFE_Header_t*)_tmp_buf.data();
+            uint32_t phase = hdr->sample_tick % 8184;
+
+            if (!_is_aligned) {
+                printf("\r  [Hunting] Size:%d Type:%d Phase:%-4d", _len, hdr->pkt_type, phase);
+                fflush(stdout);
+
+                // Use the same robust lock as Python
+                if ((hdr->pkt_type == 1 || hdr->pkt_type == 49) && phase < 1023) { 
+                    _is_aligned = true;
+                    printf("\n[+] LOCKED: Phase %u\n", phase);
+                } else continue;
+            }
+
+            std::lock_guard<std::mutex> _lock(_mtx);
+            int _p_len = _len - HEADER_SIZE;
+            if (_p_len > 0) {
                 for (int i = 0; i < _p_len; ++i) {
                     _ring[_w_ptr] = _tmp_buf[i + HEADER_SIZE];
                     _w_ptr = (_w_ptr + 1) % R_SIZE;
@@ -77,6 +94,7 @@ private:
             }
         }
     }
+}
 
 public:
     ElasticReceiver() : _w_ptr(0), _r_ptr(0), _s(INVALID_SOCKET) {
