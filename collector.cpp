@@ -17,7 +17,7 @@
 
 #pragma pack(push, 1)
 typedef struct {
-    uint32_t pkt_type; // 0x01 for Data, 0x02 for Command, etc.
+    uint8_t pkt_type; // 0x01 for Data, 0x02 for Command, etc.
     uint32_t unix_time;
     uint32_t sample_tick;
     uint32_t seq_num;
