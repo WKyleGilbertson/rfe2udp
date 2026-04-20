@@ -17,6 +17,7 @@
 
 #pragma pack(push, 1)
 typedef struct {
+    uint8_t pkt_type; // 0x01 for Data, 0x02 for Command, etc.
     uint32_t unix_time;
     uint32_t sample_tick;
     uint32_t seq_num;
@@ -42,6 +43,7 @@ int main(int argc, char** argv) {
     FT_HANDLE ftH;
     SOCKET sock;
     struct sockaddr_in servaddr;
+    S.hdr.pkt_type = 0x01; // Data packet
     
     memset(&S, 0, sizeof(struct InternalState));
     const char* target_host = (argc > 1) ? *(argv + 1) : "P2P.local";
