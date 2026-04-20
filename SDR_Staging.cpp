@@ -147,9 +147,10 @@ private:
     double _ph;
     const double _fs_rate = 8184000.0; 
 
-    inline double _map(uint8_t m, uint8_t s) {
-        if (s == 0) return (m == 0) ? 1.0 : 3.0;
-        else        return (m == 0) ? -1.0 : -3.0;
+    // Matches your 'convert' function exactly
+    inline double _map(uint8_t mag, uint8_t sign) {
+        if (sign == 0) return (mag == 0) ? 1.0 : 3.0;
+        else           return (mag == 0) ? -1.0 : -3.0;
     }
 
 public:
@@ -161,16 +162,26 @@ public:
 
         for (size_t i = 0; i < _count; ++i) {
             uint8_t b = _data[i];
-            double i0 = _map((b >> 0) & 1, (b >> 1) & 1);
-            double q0 = _map((b >> 2) & 1, (b >> 3) & 1);
-            double i1 = _map((b >> 4) & 1, (b >> 5) & 1);
-            double q1 = _map((b >> 6) & 1, (b >> 7) & 1);
+            
+            // UNPACKING BASED ON YOUR SIGNMAG STRUCT:
+            // Byte layout: [ Q1_s I1_s Q0_s I0_s | Q1_m I1_m Q0_m I0_m ]
+            // Bits:          7    6    5    4      3    2    1    0
+            
+            // Sample 0
+            double i0 = _map((b >> 0) & 1, (b >> 4) & 1); 
+            double q0 = _map((b >> 2) & 1, (b >> 6) & 1); 
 
+            // Sample 1
+            double i1 = _map((b >> 1) & 1, (b >> 5) & 1); 
+            double q1 = _map((b >> 3) & 1, (b >> 7) & 1); 
+
+            // Apply NCO and Accumulate Sample 0
             double c0 = cos(_ph), s0 = sin(_ph);
             _acc_i += (i0 * c0 + q0 * s0);
             _acc_q += (q0 * c0 - i0 * s0);
             _ph += _step; if (_ph >= PI_TWO) _ph -= PI_TWO;
 
+            // Apply NCO and Accumulate Sample 1
             double c1 = cos(_ph), s1 = sin(_ph);
             _acc_i += (i1 * c1 + q1 * s1);
             _acc_q += (q1 * c1 - i1 * s1);
