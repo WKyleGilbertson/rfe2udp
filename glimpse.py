@@ -21,12 +21,12 @@ sock.bind(('', 0))
 sock.sendto(struct.pack("<I", 0x4A4F494E), (RELAY_IP, RELAY_PORT))
 
 print(f"Targeting {CAPTURE_LIMIT} packets ({total_target_bytes} bytes) -> {FILENAME}")
-print(f"Hunting for Millisecond Alignment...")
+print(f"Hunting for Phase 0 alignment...")
 print("")
 
-# Tightened header alignment
-print(f"{'Sequence':>10} | {'Timestamp':>12} | {'Tick':>12} | {'Phase':>6}")
-print("-" * 10 + "-+-" + "-" * 12 + "-+-" + "-" * 12 + "-+-" + "-" * 6)
+# Header: 10 | 20 | 12 | 6
+print(f"{'Sequence':>10} | {'ISO8601 Timestamp':>20} | {'Tick':>12} | {'Phase':>6}")
+print("-" * 10 + "-+-" + "-" * 20 + "-+-" + "-" * 12 + "-+-" + "-" * 6)
 
 captured_count = 0
 aligned = False
@@ -48,7 +48,6 @@ try:
             if not aligned:
                 print(f"  [Waiting... Type: {pkt_type} Phase: {current_phase}]", end='\r')
                 
-                # Lock to Phase 0 specifically since you're hitting it again
                 if (pkt_type == 1 or pkt_type == 49) and current_phase == 0:
                     aligned = True
                     dev = dev_tag.decode('ascii', errors='ignore').strip('\x00')
@@ -61,17 +60,19 @@ try:
             f.write(data[HEADER_SIZE:])
             captured_count += 1
             
-            # Format row
+            # Format row: HH:MM:SS.mmmZ is 13 characters. 
+            # We use 20 for the column to allow for a little breathing room.
             ms = (tick % 8184000) // 8184
             ts = datetime.fromtimestamp(unix_t, tz=timezone.utc).strftime('%H:%M:%S')
-            time_str = f"{ts}.{ms:03d}"
-            print(f"{seq:10d} | {time_str:>12} | {tick:12d} | {current_phase:6d}")
+            time_str = f"{ts}.{ms:03d}Z"
+            
+            print(f"{seq:10d} | {time_str:>20} | {tick:12d} | {current_phase:6d}")
 
 except KeyboardInterrupt:
     print("\n\nCapture stopped.")
 
 actual_bytes = captured_count * payload_size
-print("-" * 49)
+print("-" * 57)
 if captured_count > 0:
     print(f"Success: {captured_count} packets captured.")
     print(f"Written: {actual_bytes} bytes to {FILENAME}.")
