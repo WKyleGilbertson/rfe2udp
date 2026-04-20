@@ -4,6 +4,7 @@
 #include <mutex>
 #include <cmath>
 #include <stdint.h>
+#include <cstring>
 
 #ifdef _WIN32
     #ifndef WIN32_LEAN_AND_MEAN
@@ -12,6 +13,7 @@
     #include <winsock2.h>
     #include <ws2tcpip.h>
     #pragma comment(lib, "ws2_32.lib")
+    typedef int socklen_t;
 #else
     #include <sys/socket.h>
     #include <netinet/in.h>
@@ -22,9 +24,21 @@
     #define SOCKET_ERROR -1
 #endif
 
+#pragma pack(push, 1)
+typedef struct {
+    uint8_t  pkt_type;
+    uint32_t unix_time;
+    uint32_t sample_tick;
+    uint32_t seq_num;
+    char     dev_tag; 
+} RFE_Header_t;
+#pragma pack(pop)
+
 const uint32_t JOIN_CMD = 0x4A4F494E;
 const double PI_TWO = 6.283185307179586;
-const size_t R_SIZE = 1024 * 1024 * 8; 
+const size_t R_SIZE = 1024 * 1024 * 16; 
+
+struct CorrRes { double i_val, q_val; };
 
 class ElasticReceiver {
 private:
@@ -36,16 +50,28 @@ private:
 
     void ingest_thread() {
         std::vector<uint8_t> _tmp_buf(2048);
+        bool _is_aligned = false;
+        const int HEADER_SIZE = 29;
+        const int EXPECTED_PACKET = 1052;
+
         while (true) {
             sockaddr_in _src{};
-            int _addr_len = sizeof(_src);
+            socklen_t _addr_len = sizeof(_src);
             int _len = recvfrom(_s, (char*)_tmp_buf.data(), 2048, 0, (struct sockaddr*)&_src, &_addr_len);
             
-            if (_len > 12) { 
+            if (_len == EXPECTED_PACKET) {
+                RFE_Header_t* hdr = (RFE_Header_t*)_tmp_buf.data();
+                if (!_is_aligned) {
+                    if (hdr->sample_tick % 8184 == 0) { 
+                        _is_aligned = true;
+                        std::cout << "\n[+] LOCKED: Phase 0 Alignment Achieved." << std::endl;
+                    } else continue;
+                }
+
                 std::lock_guard<std::mutex> _lock(_mtx);
-                int _p_len = _len - 12;
+                int _p_len = _len - HEADER_SIZE;
                 for (int i = 0; i < _p_len; ++i) {
-                    _ring[_w_ptr] = _tmp_buf[i + 12];
+                    _ring[_w_ptr] = _tmp_buf[i + HEADER_SIZE];
                     _w_ptr = (_w_ptr + 1) % R_SIZE;
                 }
             }
@@ -62,12 +88,14 @@ public:
         WSADATA _wsa; WSAStartup(MAKEWORD(2, 2), &_wsa);
 #endif
         _s = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+        if (_s == INVALID_SOCKET) return false;
+
         sockaddr_in _dest{};
         _dest.sin_family = AF_INET;
         _dest.sin_port = htons(port);
         inet_pton(AF_INET, ip, &_dest.sin_addr);
 
-        std::cout << "[*] Sending JOIN..." << std::endl;
+        std::cout << "[*] Sending JOIN to " << ip << ":" << port << "..." << std::endl;
         sendto(_s, (const char*)&JOIN_CMD, 4, 0, (struct sockaddr*)&_dest, sizeof(_dest));
 
         std::thread _t(&ElasticReceiver::ingest_thread, this);
@@ -96,8 +124,6 @@ public:
     }
 };
 
-struct CorrRes { double i_val, q_val; };
-
 class ChannelProcessor {
 private:
     double _ph;
@@ -117,25 +143,20 @@ public:
 
         for (size_t i = 0; i < _count; ++i) {
             uint8_t b = _data[i];
-            
             double i0 = _map((b >> 0) & 1, (b >> 1) & 1);
             double q0 = _map((b >> 2) & 1, (b >> 3) & 1);
             double i1 = _map((b >> 4) & 1, (b >> 5) & 1);
             double q1 = _map((b >> 6) & 1, (b >> 7) & 1);
 
-            double c0 = cos(_ph);
-            double s0 = sin(_ph);
+            double c0 = cos(_ph), s0 = sin(_ph);
             _acc_i += (i0 * c0 + q0 * s0);
             _acc_q += (q0 * c0 - i0 * s0);
-            _ph += _step;
-            if (_ph >= PI_TWO) _ph -= PI_TWO;
+            _ph += _step; if (_ph >= PI_TWO) _ph -= PI_TWO;
 
-            double c1 = cos(_ph);
-            double s1 = sin(_ph);
+            double c1 = cos(_ph), s1 = sin(_ph);
             _acc_i += (i1 * c1 + q1 * s1);
             _acc_q += (q1 * c1 - i1 * s1);
-            _ph += _step;
-            if (_ph >= PI_TWO) _ph -= PI_TWO;
+            _ph += _step; if (_ph >= PI_TWO) _ph -= PI_TWO;
         }
         return { _acc_i, _acc_q };
     }
@@ -143,19 +164,22 @@ public:
 
 int main() {
     ElasticReceiver _rx;
-    if (!_rx.connect_to_relay("127.0.0.1", 12345)) return -1;
+    if (!_rx.connect_to_relay("127.0.0.1", 12345)) {
+        std::cerr << "Failed to connect." << std::endl;
+        return -1;
+    }
 
     ChannelProcessor _chan;
-    const size_t _bytes_20ms = 40920; 
-    std::vector<uint8_t> _block(_bytes_20ms);
+    const size_t _bytes_10ms = 40920; 
+    std::vector<uint8_t> _block(_bytes_10ms);
 
     std::cout << "[*] SDR Staging: Processing..." << std::endl;
 
     while (true) {
-        if (_rx.get_samples(_block.data(), _bytes_20ms)) {
-            CorrRes _res = _chan.process_block(_block.data(), _bytes_20ms, 4092000.0);
-            double _m = sqrt(_res.i_val * _res.i_val + _res.q_val * _res.q_val);
-            printf("\r[DSP] I:%11.0f Q:%11.0f | Mag:%12.0f", _res.i_val, _res.q_val, _m);
+        if (_rx.get_samples(_block.data(), _bytes_10ms)) {
+            CorrRes _res = _chan.process_block(_block.data(), _bytes_10ms, 4092000.0);
+            double _mag = sqrt(_res.i_val * _res.i_val + _res.q_val * _res.q_val);
+            printf("\r[DSP] I:%13.0f Q:%13.0f | Mag:%14.0f", _res.i_val, _res.q_val, _mag);
             fflush(stdout);
         }
     }
