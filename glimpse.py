@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 HEADER_FORMAT = "<BIII16s"
 HEADER_SIZE = 29
 EXPECTED_SIZE = 1052 
-CAPTURE_LIMIT = 40
+CAPTURE_LIMIT = 80
 FILENAME = "cap.raw"
 
 RELAY_IP = "127.0.0.1"
