@@ -1,38 +1,36 @@
 #include "ChannelProcessor.h"
-#include <cmath>
 
-ChannelProcessor::ChannelProcessor(double fs_rate) : _ph(0.0), _fs(fs_rate) {
-    const double PI_TWO = 6.283185307179586;
-    for (int i = 0; i < LUT_SIZE; i++) {
-        _sin_lut[i] = (float)std::sin(i * PI_TWO / LUT_SIZE);
-        _cos_lut[i] = (float)std::cos(i * PI_TWO / LUT_SIZE);
-    }
+ChannelProcessor::ChannelProcessor(double fs_rate) 
+    : _fs(fs_rate), _nco(10, (float)fs_rate) {
 }
 
 CorrRes ChannelProcessor::process(const uint8_t* data, size_t count, double freq) {
-    double acc_i = 0.0, acc_q = 0.0;
-    const double PI_TWO = 6.283185307179586;
-    double step = (PI_TWO * freq) / _fs;
-    const double inv_pi_two_lut = LUT_SIZE / PI_TWO;
+    float acc_i = 0.0f;
+    float acc_q = 0.0f;
+    
+    _nco.SetFrequency((float)freq);
 
     for (size_t i = 0; i < count; ++i) {
         uint8_t b = data[i];
         
-        // Two samples packed per byte (Sample 0 and Sample 1)
+        // Two samples packed per byte
         for (int s = 0; s < 2; s++) {
-            int shift = s * 2;
-            double iv = _map((b >> shift) & 1, (b >> (shift + 4)) & 1);
-            double qv = _map((b >> (shift + 1)) & 1, (b >> (shift + 5)) & 1);
+            uint32_t idx = _nco.clk(); 
+            float s_val = _nco.sine(idx);
+            float c_val = _nco.cosine(idx);
 
-            int idx = (int)(_ph * inv_pi_two_lut) % LUT_SIZE;
-            if (idx < 0) idx += LUT_SIZE;
+            // Bit unpacking logic:
+            // s=0: bit 0 (Sign), bit 4 (Mag)
+            // s=1: bit 2 (Sign), bit 6 (Mag)
+            int sign_bit = (b >> (s * 2)) & 1;
+            int mag_bit  = (b >> (s * 2 + 4)) & 1;
+            
+            double val = _map(sign_bit, mag_bit);
 
-            acc_i += (iv * _cos_lut[idx] + qv * _sin_lut[idx]);
-            acc_q += (qv * _cos_lut[idx] - iv * _sin_lut[idx]);
-
-            _ph += step;
-            if (_ph >= PI_TWO) _ph -= PI_TWO;
+            // Simple Real-to-Complex Mix
+            acc_i += (float)(val * c_val);
+            acc_q -= (float)(val * s_val); 
         }
     }
-    return {acc_i, acc_q};
+    return { (double)acc_i, (double)acc_q };
 }
